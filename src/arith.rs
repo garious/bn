@@ -8,6 +8,7 @@ use byteorder::{BigEndian, ByteOrder};
 /// 256-bit, stack allocated biginteger for use in prime field
 /// arithmetic.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[repr(C)]
 pub struct U256(pub [u128; 2]);
 

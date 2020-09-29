@@ -4,6 +4,9 @@ use core::{fmt, ops::{Add, Mul, Neg, Sub}};
 use rand::Rng;
 use alloc::vec::Vec;
 
+#[cfg(feature = "borsh")]
+use borsh::{BorshSerialize, BorshDeserialize};
+
 #[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 
@@ -33,9 +36,13 @@ pub trait GroupElement
 }
 
 pub trait GroupParams: Sized + fmt::Debug {
-    #[cfg(feature = "rustc-serialize")]
+    #[cfg(all(feature = "rustc-serialize", not(feature = "borsh")))]
     type Base: FieldElement + Decodable + Encodable;
-    #[cfg(not(feature = "rustc-serialize"))]
+    #[cfg(all(not(feature = "rustc-serialize"), feature = "borsh"))]
+    type Base: FieldElement + BorshSerialize + BorshDeserialize;
+    #[cfg(all(feature = "rustc-serialize", feature = "borsh"))]
+    type Base: FieldElement + Decodable + Encodable + BorshSerialize + BorshDeserialize;
+    #[cfg(all(not(feature = "rustc-serialize"), not(feature = "borsh")))]
     type Base: FieldElement;
 
     fn name() -> &'static str;
@@ -227,6 +234,65 @@ impl<P: GroupParams> AffineG<P> {
             y: self.y,
             z: P::Base::one(),
         }
+    }
+}
+
+#[cfg(feature = "borsh")]
+impl<P: GroupParams> BorshSerialize for G<P> {
+    fn serialize<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
+        self.x().serialize(w)?;
+        self.y().serialize(w)?;
+        self.z().serialize(w)?;
+        Ok(())
+        //if self.is_zero() {
+            //let l: u8 = 0;
+            //l.serialize(w)
+        //} else {
+            //let l: u8 = 4;
+            //l.serialize(w)?;
+            //self.to_affine().unwrap().serialize(w)
+        //}
+    }
+}
+
+#[cfg(feature = "borsh")]
+impl<P: GroupParams> BorshSerialize for AffineG<P> {
+    fn serialize<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
+        self.x.serialize(w)?;
+        self.y.serialize(w)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "borsh")]
+impl<P: GroupParams> BorshDeserialize for G<P> {
+    fn deserialize(s: &mut &[u8]) -> Result<Self, std::io::Error> {
+        let x = P::Base::deserialize(s)?;
+        let y = P::Base::deserialize(s)?;
+        let z = P::Base::deserialize(s)?;
+        Ok(G::new(x, y, z))
+        //let l = u8::deserialize(s)?;
+        //if l == 0 {
+        //    Ok(G::zero())
+        //} else if l == 4 {
+            //Ok(AffineG::deserialize(s)?.to_jacobian())
+        //} else {
+        //    Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid leading byte for uncompressed group element"))
+        //}
+    }
+}
+
+#[cfg(feature = "borsh")]
+impl<P: GroupParams> BorshDeserialize for AffineG<P> {
+    fn deserialize(s: &mut &[u8]) -> Result<AffineG<P>, std::io::Error> {
+        let x = P::Base::deserialize(s)?;
+        let y = P::Base::deserialize(s)?;
+
+        Self::new(x, y).map_err(|e| match e {
+            Error::NotOnCurve => std::io::Error::new(std::io::ErrorKind::Other, "point is not on the curve"),
+            Error::NotInSubgroup => std::io::Error::new(std::io::ErrorKind::Other, "point is not in the subgroup"),
+        })
     }
 }
 
@@ -1096,7 +1162,7 @@ fn test_batch_bilinearity_empty() {
 
 #[test]
 fn test_batch_bilinearity_one() {
-    use rand::{SeedableRng, StdRng};
+    use rand::{SeedableRng, rngs::StdRng};
     let seed = [
         0, 0, 0, 0, 0, 0, 64, 13, // 103245
         0, 0, 0, 0, 0, 0, 176, 2, // 191922
@@ -1116,7 +1182,7 @@ fn test_batch_bilinearity_one() {
 
 #[test]
 fn test_batch_bilinearity_fifty() {
-    use rand::{SeedableRng, StdRng};
+    use rand::{SeedableRng, rngs::StdRng};
     let seed = [
         0, 0, 0, 0, 0, 0, 64, 13, // 103245
         0, 0, 0, 0, 0, 0, 176, 2, // 191922
@@ -1148,7 +1214,7 @@ fn test_batch_bilinearity_fifty() {
 
 #[test]
 fn test_bilinearity() {
-    use rand::{SeedableRng, StdRng};
+    use rand::{SeedableRng, rngs::StdRng};
     let seed = [
         0, 0, 0, 0, 0, 0, 64, 13, // 103245
         0, 0, 0, 0, 0, 0, 176, 2, // 191922

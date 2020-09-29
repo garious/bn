@@ -37,6 +37,7 @@ pub fn fq2_nonresidue() -> Fq2 {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[repr(C)]
 pub struct Fq2 {
     c0: Fq,
